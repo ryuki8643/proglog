@@ -29,7 +29,7 @@ type ConsumeResponse struct {
 	Record Record `json:"record"`
 }
 
-func (s httpServer) handleProduce(w http.ResponseWriter, r *http.Request) {
+func (s httpServer) HandleProduce(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	var req ProduceRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
@@ -80,7 +80,7 @@ func (s *httpServer) HandleConsume(w http.ResponseWriter, r *http.Request) {
 func NewHTTPServer(addr string) *http.Server {
 	httpsrv := newHTTPServer()
 	r := mux.NewRouter()
-	r.HandleFunc("/", httpsrv.handleProduce).Methods("POST")
+	r.HandleFunc("/", httpsrv.HandleProduce).Methods("POST")
 	r.HandleFunc("/", httpsrv.HandleConsume).Methods("GET")
 	return &http.Server{
 		Addr:    addr,
