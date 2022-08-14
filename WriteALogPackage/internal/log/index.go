@@ -1,6 +1,7 @@
 package log
 
 import (
+	"fmt"
 	"github.com/tysonmote/gommap"
 	"io"
 	"os"
@@ -9,7 +10,7 @@ import (
 const (
 	offWidth uint64 = 4
 	posWidth uint64 = 8
-	endWidth        = offWidth + posWidth
+	entWidth        = offWidth + posWidth
 )
 
 type index struct {
@@ -45,12 +46,15 @@ func newIndex(f *os.File, c Config) (*index, error) {
 
 func (i *index) Close() error {
 	if err := i.mmap.Sync(gommap.MS_SYNC); err != nil {
+		fmt.Println("MS_SYNC")
 		return err
 	}
 	if err := i.file.Sync(); err != nil {
+		fmt.Println("SYNC")
 		return err
 	}
 	if err := i.file.Truncate(int64(i.size)); err != nil {
+		fmt.Println("Truncate")
 		return err
 	}
 	return i.file.Close()
@@ -61,21 +65,21 @@ func (i *index) Read(in int64) (out uint32, pos uint64, err error) {
 		return 0, 0, io.EOF
 	}
 	if in == -1 {
-		out = uint32((i.size / endWidth) - 1)
+		out = uint32((i.size / entWidth) - 1)
 	} else {
 		out = uint32(in)
 	}
-	pos = uint64(out) * endWidth
-	if i.size < pos+endWidth {
+	pos = uint64(out) * entWidth
+	if i.size < pos+entWidth {
 		return 0, 0, io.EOF
 	}
 	out = enc.Uint32(i.mmap[pos : pos+offWidth])
-	pos = enc.Uint64(i.mmap[pos+offWidth : pos+endWidth])
+	pos = enc.Uint64(i.mmap[pos+offWidth : pos+entWidth])
 	return out, pos, nil
 }
 
 func (i *index) isMaxed() bool {
-	return uint64(len(i.mmap)) < i.size+endWidth
+	return uint64(len(i.mmap)) < i.size+entWidth
 }
 
 func (i *index) Write(off uint32, pos uint64) error {
@@ -83,8 +87,8 @@ func (i *index) Write(off uint32, pos uint64) error {
 		return io.EOF
 	}
 	enc.PutUint32(i.mmap[i.size:i.size+offWidth], off)
-	enc.PutUint64(i.mmap[i.size+offWidth:i.size+endWidth], pos)
-	i.size += uint64(endWidth)
+	enc.PutUint64(i.mmap[i.size+offWidth:i.size+entWidth], pos)
+	i.size += uint64(entWidth)
 	return nil
 
 }
