@@ -5,17 +5,20 @@ CONFIG_PATH=${HOME}/.proglog/
 init:
 	mkdir -p ${CONFIG_PATH}
 
-
-.PHONY:gencert
+.PHONY:rm
+rm:
+	rmdir ${CONFIG_PATH}
+.PHONY: gencert
 gencert:
 	cfssl gencert \
-		-initca test/ca-scr.json | cfssljson -bare ca
+		-initca test/ca-csr.json | cfssljson -bare ca
+
 	cfssl gencert \
 		-ca=ca.pem \
 		-ca-key=ca-key.pem \
-		-config=test/ca-config.json\
+		-config=test/ca-config.json \
 		-profile=server \
-		test/server-csr.json |cfssljson -bare server
+		test/server-csr.json | cfssljson -bare server
 	mv *.pem *.csr ${CONFIG_PATH}
 
 .PHONY:test

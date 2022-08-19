@@ -13,7 +13,7 @@ func configFile(filename string) string {
 	if err != nil {
 		panic(err)
 	}
-	return filepath.Join(homeDir, "proglog", filename)
+	return filepath.Join(homeDir, ".proglog", filename)
 }
 
 var (
