@@ -6,11 +6,11 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-type ErrorOffsetOutOfRange struct {
+type ErrOffsetOutOfRange struct {
 	Offset uint64
 }
 
-func (e ErrorOffsetOutOfRange) GRPCStatus() *status.Status {
+func (e ErrOffsetOutOfRange) GRPCStatus() *status.Status {
 	st := status.New(
 		404,
 		fmt.Sprintf("offset out of range:%d", e.Offset),
@@ -30,6 +30,6 @@ func (e ErrorOffsetOutOfRange) GRPCStatus() *status.Status {
 	return std
 }
 
-func (e ErrorOffsetOutOfRange) Error() string {
+func (e ErrOffsetOutOfRange) Error() string {
 	return e.GRPCStatus().Err().Error()
 }
