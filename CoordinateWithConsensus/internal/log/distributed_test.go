@@ -46,7 +46,7 @@ func TestMultipleNodes(t *testing.T) {
 
 		if i != 0 {
 			err = logs[0].Join(
-				fmt.Sprintf("%d", 1), ln.Addr().String())
+				fmt.Sprintf("%d", i), ln.Addr().String())
 			require.NoError(t, err)
 		} else {
 			err = l.WaitForLeader(3 * time.Second)
@@ -67,10 +67,12 @@ func TestMultipleNodes(t *testing.T) {
 			for j := 0; j < nodeCount; j++ {
 				got, err := logs[j].Read(off)
 				if err != nil {
+					fmt.Println("got")
 					return false
 				}
 				record.Offset = off
 				if !reflect.DeepEqual(got.Value, record.Value) {
+					fmt.Println("type")
 					return false
 				}
 			}

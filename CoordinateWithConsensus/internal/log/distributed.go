@@ -57,7 +57,7 @@ func (s *StreamLayer) Dial(
 	if s.peerTLSConfig != nil {
 		conn = tls.Client(conn, s.peerTLSConfig)
 	}
-	return nil, err
+	return conn, err
 }
 
 func (s *StreamLayer) Accept() (net.Conn, error) {
