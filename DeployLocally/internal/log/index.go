@@ -1,10 +1,10 @@
 package log
 
 import (
+	"fmt"
+	"github.com/tysonmote/gommap"
 	"io"
 	"os"
-
-	"github.com/tysonmote/gommap"
 )
 
 const (
@@ -41,16 +41,20 @@ func newIndex(f *os.File, c Config) (*index, error) {
 		return nil, err
 	}
 	return idx, nil
+
 }
 
 func (i *index) Close() error {
 	if err := i.mmap.Sync(gommap.MS_SYNC); err != nil {
+		fmt.Println("MS_SYNC")
 		return err
 	}
 	if err := i.file.Sync(); err != nil {
+		fmt.Println("SYNC")
 		return err
 	}
 	if err := i.file.Truncate(int64(i.size)); err != nil {
+		fmt.Println("Truncate")
 		return err
 	}
 	return i.file.Close()
@@ -74,6 +78,10 @@ func (i *index) Read(in int64) (out uint32, pos uint64, err error) {
 	return out, pos, nil
 }
 
+func (i *index) isMaxed() bool {
+	return uint64(len(i.mmap)) < i.size+entWidth
+}
+
 func (i *index) Write(off uint32, pos uint64) error {
 	if i.isMaxed() {
 		return io.EOF
@@ -82,12 +90,8 @@ func (i *index) Write(off uint32, pos uint64) error {
 	enc.PutUint64(i.mmap[i.size+offWidth:i.size+entWidth], pos)
 	i.size += uint64(entWidth)
 	return nil
-}
 
-func (i *index) isMaxed() bool {
-	return uint64(len(i.mmap)) < i.size+entWidth
 }
-
 func (i *index) Name() string {
 	return i.file.Name()
 }

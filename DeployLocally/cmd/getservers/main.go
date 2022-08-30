@@ -4,7 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	api "github.com/travisjeffery/proglog/api/v1"
+	api "github.com/ryuki8643/proglog/api/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"log"

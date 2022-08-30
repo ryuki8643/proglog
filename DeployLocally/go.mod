@@ -1,4 +1,4 @@
-module github.com/travisjeffery/proglog
+module github.com/ryuki8643/proglog
 
 go 1.18
 

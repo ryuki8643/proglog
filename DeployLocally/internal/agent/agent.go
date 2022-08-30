@@ -4,35 +4,20 @@ import (
 	"bytes"
 	"crypto/tls"
 	"fmt"
-	"io"
-	"net"
-	"sync"
-	"time"
-
 	"github.com/hashicorp/raft"
+	"github.com/ryuki8643/proglog/internal/auth"
+	"github.com/ryuki8643/proglog/internal/discovery"
+	"github.com/ryuki8643/proglog/internal/log"
+	"github.com/ryuki8643/proglog/internal/server"
 	"github.com/soheilhy/cmux"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
-
-	"github.com/travisjeffery/proglog/internal/auth"
-	"github.com/travisjeffery/proglog/internal/discovery"
-	"github.com/travisjeffery/proglog/internal/log"
-	"github.com/travisjeffery/proglog/internal/server"
+	"io"
+	"net"
+	"sync"
+	"time"
 )
-
-type Agent struct {
-	Config Config
-
-	mux        cmux.CMux
-	log        *log.DistributedLog
-	server     *grpc.Server
-	membership *discovery.Membership
-
-	shutdown     bool
-	shutdowns    chan struct{}
-	shutdownLock sync.Mutex
-}
 
 type Config struct {
 	ServerTLSConfig *tls.Config
@@ -47,51 +32,25 @@ type Config struct {
 	Bootstrap       bool
 }
 
+type Agent struct {
+	Config
+
+	mux        cmux.CMux
+	log        *log.DistributedLog
+	server     *grpc.Server
+	membership *discovery.Membership
+
+	shutdown     bool
+	shutdowns    chan struct{}
+	shutdownLock sync.Mutex
+}
+
 func (c Config) RPCAddr() (string, error) {
 	host, _, err := net.SplitHostPort(c.BindAddr)
 	if err != nil {
 		return "", err
 	}
 	return fmt.Sprintf("%s:%d", host, c.RPCPort), nil
-}
-
-func New(config Config) (*Agent, error) {
-	a := &Agent{
-		Config:    config,
-		shutdowns: make(chan struct{}),
-	}
-	setup := []func() error{
-		a.setupLogger,
-		a.setupMux,
-		a.setupLog,
-		a.setupServer,
-		a.setupMembership,
-	}
-	for _, fn := range setup {
-		if err := fn(); err != nil {
-			return nil, err
-		}
-	}
-	go a.serve()
-	return a, nil
-}
-
-func (a *Agent) setupMux() error {
-	addr, err := net.ResolveTCPAddr("tcp", a.Config.BindAddr)
-	if err != nil {
-		return err
-	}
-	rpcAddr := fmt.Sprintf(
-		"%s:%d",
-		addr.IP.String(),
-		a.Config.RPCPort,
-	)
-	ln, err := net.Listen("tcp", rpcAddr)
-	if err != nil {
-		return err
-	}
-	a.mux = cmux.New(ln)
-	return nil
 }
 
 func (a *Agent) setupLogger() error {
@@ -111,7 +70,6 @@ func (a *Agent) setupLog() error {
 		}
 		return bytes.Equal(b, []byte{byte(log.RaftRPC)})
 	})
-
 	logConfig := log.Config{}
 	logConfig.Raft.StreamLayer = log.NewStreamLayer(
 		raftLn,
@@ -129,8 +87,7 @@ func (a *Agent) setupLog() error {
 
 	a.log, err = log.NewDistributedLog(
 		a.Config.DataDir,
-		logConfig,
-	)
+		logConfig)
 	if err != nil {
 		return err
 	}
@@ -138,6 +95,49 @@ func (a *Agent) setupLog() error {
 		err = a.log.WaitForLeader(3 * time.Second)
 	}
 	return err
+}
+
+func (a *Agent) setupMembership() error {
+	rpcAddr, err := a.Config.RPCAddr()
+	if err != nil {
+		return err
+	}
+	a.membership, err = discovery.New(a.log, discovery.Config{
+		NodeName: a.Config.NodeName,
+		BindAddr: a.Config.BindAddr,
+		Tags: map[string]string{
+			"rpc_addr": rpcAddr,
+		},
+		StartJoinAddrs: a.Config.StartJoinAddrs,
+	})
+	return err
+
+}
+func (a *Agent) Shutdown() error {
+	a.shutdownLock.Lock()
+	defer a.shutdownLock.Unlock()
+	if a.shutdown {
+		return nil
+	}
+	a.shutdown = true
+	close(a.shutdowns)
+
+	shutdown := []func() error{
+		a.membership.Leave,
+
+		func() error {
+			a.server.GracefulStop()
+			return nil
+		},
+		a.log.Close,
+	}
+	for _, fn := range shutdown {
+		if err := fn(); err != nil {
+			return err
+		}
+	}
+	return nil
+
 }
 
 func (a *Agent) setupServer() error {
@@ -167,46 +167,24 @@ func (a *Agent) setupServer() error {
 		}
 	}()
 	return err
+
 }
 
-func (a *Agent) setupMembership() error {
-	rpcAddr, err := a.Config.RPCAddr()
+func (a *Agent) setupMux() error {
+	addr, err := net.ResolveTCPAddr("tcp", a.Config.BindAddr)
 	if err != nil {
 		return err
 	}
-	a.membership, err = discovery.New(a.log, discovery.Config{
-		NodeName: a.Config.NodeName,
-		BindAddr: a.Config.BindAddr,
-		Tags: map[string]string{
-			"rpc_addr": rpcAddr,
-		},
-		StartJoinAddrs: a.Config.StartJoinAddrs,
-	})
-	return err
-}
-
-func (a *Agent) Shutdown() error {
-	a.shutdownLock.Lock()
-	defer a.shutdownLock.Unlock()
-	if a.shutdown {
-		return nil
+	rpcAddr := fmt.Sprintf(
+		"%s:%d",
+		addr.IP.String(),
+		a.Config.RPCPort,
+	)
+	ln, err := net.Listen("tcp", rpcAddr)
+	if err != nil {
+		return err
 	}
-	a.shutdown = true
-	close(a.shutdowns)
-
-	shutdown := []func() error{
-		a.membership.Leave,
-		func() error {
-			a.server.GracefulStop()
-			return nil
-		},
-		a.log.Close,
-	}
-	for _, fn := range shutdown {
-		if err := fn(); err != nil {
-			return err
-		}
-	}
+	a.mux = cmux.New(ln)
 	return nil
 }
 
@@ -216,4 +194,25 @@ func (a *Agent) serve() error {
 		return err
 	}
 	return nil
+}
+
+func New(config Config) (*Agent, error) {
+	a := &Agent{
+		Config:    config,
+		shutdowns: make(chan struct{}),
+	}
+	setup := []func() error{
+		a.setupLogger,
+		a.setupMux,
+		a.setupLog,
+		a.setupServer,
+		a.setupMembership,
+	}
+	for _, fn := range setup {
+		if err := fn(); err != nil {
+			return nil, err
+		}
+	}
+	go a.serve()
+	return a, nil
 }

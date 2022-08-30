@@ -1,9 +1,14 @@
 CONFIG_PATH=${HOME}/.proglog/
 
-.PHONY: init
+
+.PHONY:init
 init:
 	mkdir -p ${CONFIG_PATH}
 
+.PHONY:rm
+rm:
+	rm -r ${CONFIG_PATH}
+	rmdir ${CONFIG_PATH}
 .PHONY: gencert
 gencert:
 	cfssl gencert \
@@ -31,28 +36,28 @@ gencert:
 		-profile=client \
 		-cn="nobody" \
 		test/client-csr.json | cfssljson -bare nobody-client
-
 	mv *.pem *.csr ${CONFIG_PATH}
 
 $(CONFIG_PATH)/model.conf:
 	cp test/model.conf $(CONFIG_PATH)/model.conf
-
 $(CONFIG_PATH)/policy.csv:
 	cp test/policy.csv $(CONFIG_PATH)/policy.csv
 
-.PHONY: test
+.PHONY:test
 test: $(CONFIG_PATH)/policy.csv $(CONFIG_PATH)/model.conf
+	go clean -testcache
 	go test -race ./...
 
-.PHONY: compile
+.PHONY:compile
 compile:
-	protoc api/v1/*.proto \
+	protoc api/v1/*proto \
 		--go_out=. \
 		--go-grpc_out=. \
 		--go_opt=paths=source_relative \
 		--go-grpc_opt=paths=source_relative \
 		--proto_path=.
 
-TAG ?=0.0.1
+TAG ?= 0.0.1
+
 build-docker:
 	docker build -t github.com/ryuki8643/proglog:$(TAG) .

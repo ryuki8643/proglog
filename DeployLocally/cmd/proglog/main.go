@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/travisjeffery/proglog/internal/agent"
-	"github.com/travisjeffery/proglog/internal/config"
+	"github.com/ryuki8643/proglog/internal/agent"
+	"github.com/ryuki8643/proglog/internal/config"
 	"log"
 	"os"
 	"os/signal"

@@ -76,7 +76,6 @@ func (s *store) ReadAt(p []byte, off int64) (int, error) {
 	}
 	return s.File.ReadAt(p, off)
 }
-
 func (s *store) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -85,4 +84,5 @@ func (s *store) Close() error {
 		return err
 	}
 	return s.File.Close()
+
 }

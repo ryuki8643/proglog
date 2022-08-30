@@ -7,6 +7,14 @@ import (
 	"os"
 )
 
+type TLSConfig struct {
+	CertFile      string
+	KeyFile       string
+	CAFile        string
+	ServerAddress string
+	Server        bool
+}
+
 func SetupTLSConfig(cfg TLSConfig) (*tls.Config, error) {
 	var err error
 	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS13}
@@ -19,6 +27,7 @@ func SetupTLSConfig(cfg TLSConfig) (*tls.Config, error) {
 		if err != nil {
 			return nil, err
 		}
+
 	}
 	if cfg.CAFile != "" {
 		b, err := os.ReadFile(cfg.CAFile)
@@ -42,12 +51,4 @@ func SetupTLSConfig(cfg TLSConfig) (*tls.Config, error) {
 		tlsConfig.ServerName = cfg.ServerAddress
 	}
 	return tlsConfig, nil
-}
-
-type TLSConfig struct {
-	CertFile      string
-	KeyFile       string
-	CAFile        string
-	ServerAddress string
-	Server        bool
 }

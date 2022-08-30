@@ -3,25 +3,24 @@ package server
 import (
 	"context"
 	"flag"
-	"net"
-	"os"
-	"testing"
-	"time"
-
+	api "github.com/ryuki8643/proglog/api/v1"
+	"github.com/ryuki8643/proglog/internal/auth"
+	"github.com/ryuki8643/proglog/internal/config"
+	"github.com/ryuki8643/proglog/internal/log"
 	"github.com/stretchr/testify/require"
-	api "github.com/travisjeffery/proglog/api/v1"
-	"github.com/travisjeffery/proglog/internal/auth"
-	"github.com/travisjeffery/proglog/internal/config"
-	"github.com/travisjeffery/proglog/internal/log"
 	"go.opencensus.io/examples/exporter"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
+	"net"
+	"os"
+	"testing"
+	"time"
 )
 
-var debug = flag.Bool("debug", false, "Enable observability for debugging.")
+var debug = flag.Bool("debug", false, "Enable observability for debugging")
 
 func TestMain(m *testing.M) {
 	flag.Parse()
@@ -56,9 +55,10 @@ func TestServer(t *testing.T) {
 			fn(t, rootClient, nobodyClient, config)
 		})
 	}
+
 }
 
-func setupTest(t *testing.T, fn func(*Config)) (
+func setupTest(t *testing.T, fn func(config *Config)) (
 	rootClient api.LogClient,
 	nobodyClient api.LogClient,
 	cfg *Config,
@@ -88,18 +88,17 @@ func setupTest(t *testing.T, fn func(*Config)) (
 		client := api.NewLogClient(conn)
 		return conn, client, opts
 	}
-
 	var rootConn *grpc.ClientConn
 	rootConn, rootClient, _ = newClient(
 		config.RootClientCertFile,
 		config.RootClientKeyFile,
 	)
-
 	var nobodyConn *grpc.ClientConn
 	nobodyConn, nobodyClient, _ = newClient(
 		config.NobodyClientCertFile,
 		config.NobodyClientKeyFile,
 	)
+
 	serverTLSConfig, err := config.SetupTLSConfig(config.TLSConfig{
 		CertFile:      config.ServerCertFile,
 		KeyFile:       config.ServerKeyFile,
@@ -117,19 +116,20 @@ func setupTest(t *testing.T, fn func(*Config)) (
 	require.NoError(t, err)
 
 	authorizer := auth.New(config.ACLModelFile, config.ACLPolicyFile)
+
 	var telemetryExporter *exporter.LogExporter
 	if *debug {
 		metricsLogFile, err := os.CreateTemp("", "metrics-*.log")
 		require.NoError(t, err)
 		t.Logf("metrics log file: %s", metricsLogFile.Name())
 
-		tracesLogFile, err := os.CreateTemp("", "traces-*.log")
+		traceLogFile, err := os.CreateTemp("", "trace-*.log")
 		require.NoError(t, err)
-		t.Logf("traces log file: %s", tracesLogFile.Name())
+		t.Logf("trace log file: %s", traceLogFile.Name())
 
 		telemetryExporter, err = exporter.NewLogExporter(exporter.Options{
 			MetricsLogFile:    metricsLogFile.Name(),
-			TracesLogFile:     tracesLogFile.Name(),
+			TracesLogFile:     traceLogFile.Name(),
 			ReportingInterval: time.Second,
 		})
 		require.NoError(t, err)
@@ -162,6 +162,7 @@ func setupTest(t *testing.T, fn func(*Config)) (
 			telemetryExporter.Close()
 		}
 	}
+
 }
 
 func testProduceConsume(t *testing.T, client, _ api.LogClient, config *Config) {
@@ -186,6 +187,7 @@ func testProduceConsume(t *testing.T, client, _ api.LogClient, config *Config) {
 	require.NoError(t, err)
 	require.Equal(t, want.Value, consume.Record.Value)
 	require.Equal(t, want.Offset, consume.Record.Offset)
+
 }
 
 func testConsumePastBoundary(
@@ -194,7 +196,6 @@ func testConsumePastBoundary(
 	config *Config,
 ) {
 	ctx := context.Background()
-
 	produce, err := client.Produce(ctx, &api.ProduceRequest{
 		Record: &api.Record{
 			Value: []byte("hello world"),
@@ -211,7 +212,7 @@ func testConsumePastBoundary(
 	got := status.Code(err)
 	want := status.Code(api.ErrOffsetOutOfRange{}.GRPCStatus().Err())
 	if got != want {
-		t.Fatalf("got err: %v, want: %v", got, want)
+		t.Fatalf("got err:%v,want,%v", got, want)
 	}
 }
 
@@ -220,6 +221,7 @@ func testProduceConsumeStream(
 	client, _ api.LogClient,
 	config *Config,
 ) {
+
 	ctx := context.Background()
 
 	records := []*api.Record{{
@@ -243,13 +245,11 @@ func testProduceConsumeStream(
 			require.NoError(t, err)
 			if res.Offset != uint64(offset) {
 				t.Fatalf(
-					"got offset: %d, want: %d",
+					"got offset:%d,want:%d",
 					res.Offset,
-					offset,
-				)
+					offset)
 			}
 		}
-
 	}
 
 	{
@@ -268,6 +268,7 @@ func testProduceConsumeStream(
 			})
 		}
 	}
+
 }
 
 func testUnauthorized(
@@ -289,7 +290,7 @@ func testUnauthorized(
 	}
 	gotCode, wantCode := status.Code(err), codes.PermissionDenied
 	if gotCode != wantCode {
-		t.Fatalf("got code: %d, want: %d", gotCode, wantCode)
+		t.Fatalf("got code: %d,want: %d", gotCode, wantCode)
 	}
 	consume, err := client.Consume(ctx, &api.ConsumeRequest{
 		Offset: 0,

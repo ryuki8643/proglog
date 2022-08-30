@@ -4,21 +4,38 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"os"
-	"testing"
-	"time"
-
+	api "github.com/ryuki8643/proglog/api/v1"
+	"github.com/ryuki8643/proglog/internal/agent"
+	"github.com/ryuki8643/proglog/internal/config"
+	"github.com/ryuki8643/proglog/internal/loadbalance"
 	"github.com/stretchr/testify/require"
 	"github.com/travisjeffery/go-dynaport"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
-
-	api "github.com/travisjeffery/proglog/api/v1"
-	"github.com/travisjeffery/proglog/internal/agent"
-	"github.com/travisjeffery/proglog/internal/config"
-	"github.com/travisjeffery/proglog/internal/loadbalance"
+	"os"
+	"testing"
+	"time"
 )
+
+func client(
+	t *testing.T,
+	agent *agent.Agent,
+	tlsConfig *tls.Config) api.LogClient {
+	tlsCreds := credentials.NewTLS(tlsConfig)
+	opts := []grpc.DialOption{grpc.WithTransportCredentials(tlsCreds)}
+	rpcAddr, err := agent.Config.RPCAddr()
+	require.NoError(t, err)
+
+	conn, err := grpc.Dial(fmt.Sprintf(
+		"%s:///%s",
+		loadbalance.Name,
+		rpcAddr), opts...)
+	require.NoError(t, err)
+
+	client := api.NewLogClient(conn)
+	return client
+}
 
 func TestAgent(t *testing.T) {
 	serverTLSConfig, err := config.SetupTLSConfig(config.TLSConfig{
@@ -55,7 +72,6 @@ func TestAgent(t *testing.T) {
 				agents[0].Config.BindAddr,
 			)
 		}
-
 		agent, err := agent.New(agent.Config{
 			NodeName:        fmt.Sprintf("%d", i),
 			StartJoinAddrs:  startJoinAddrs,
@@ -93,10 +109,7 @@ func TestAgent(t *testing.T) {
 		},
 	)
 	require.NoError(t, err)
-
-	// レプリケーションが完了するまで待つ
 	time.Sleep(3 * time.Second)
-
 	consumeResponse, err := leaderClient.Consume(
 		context.Background(),
 		&api.ConsumeRequest{
@@ -120,32 +133,10 @@ func TestAgent(t *testing.T) {
 		context.Background(),
 		&api.ConsumeRequest{
 			Offset: produceResponse.Offset + 1,
-		},
-	)
+		})
 	require.Nil(t, consumeResponse)
 	require.Error(t, err)
 	got := status.Code(err)
 	want := status.Code(api.ErrOffsetOutOfRange{}.GRPCStatus().Err())
 	require.Equal(t, got, want)
-}
-
-func client(
-	t *testing.T,
-	agent *agent.Agent,
-	tlsConfig *tls.Config,
-) api.LogClient {
-	tlsCreds := credentials.NewTLS(tlsConfig)
-	opts := []grpc.DialOption{grpc.WithTransportCredentials(tlsCreds)}
-	rpcAddr, err := agent.Config.RPCAddr()
-	require.NoError(t, err)
-
-	conn, err := grpc.Dial(fmt.Sprintf(
-		"%s:///%s",
-		loadbalance.Name,
-		rpcAddr,
-	), opts...) //
-	require.NoError(t, err)
-
-	client := api.NewLogClient(conn)
-	return client
 }
